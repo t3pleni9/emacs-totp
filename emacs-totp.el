@@ -29,7 +29,7 @@
 ;;
 ;; "machine account@somewhere login user password JBSWY3DPEHPK3PXP"
 ;;
-;; ELISP> (totp-for "account@somewhere")
+;; Elisp> (totp-for "account@somewhere")
 ;; "508128"
 ;; ELISP>
 ;;
@@ -40,23 +40,30 @@
 (require 'bindat)
 (require 'unibyte-base32)
 (require 'hmac-sha1)
-(require 'netrc)
 (require 'cl-lib)
-
-(defun totp-pull-authinfo (machine)
-  "Pull a base32 encoded secret for MACHINE from authinfo"
-  (let* ((netrc (netrc-parse (expand-file-name "~/.authinfo.gpg")))
-         (machine-entry (netrc-machine netrc machine)))
-    (when machine-entry (netrc-get machine-entry "password"))))
-
-(defun totp-for (account)
-  "Return a totp for ACCOUNT"
-  (interactive "sAccount: ")
-  (format "%06d" (totp (totp-pull-authinfo account))))
 
 (defun totp-dump-hex (s)
   "Return a hex representation of s"
   (mapconcat #'(lambda (x) (format "%.2x" x)) s ""))
+
+(defun copy-to-clipboard (pin time-to-clear)
+ (progn
+              (funcall interprogram-cut-function (number-to-string pin))
+              (run-at-time time-to-clear nil (lambda () (funcall interprogram-cut-function ""))))
+ (message (format "PIN: %06d securely copied to clipboard and will be removed in %d" pin time-to-clear))
+          
+ )
+
+(defun org-get-pin (&optional ask-for-input?)
+  "Get TOTP for the given org-heading with :PROPERTY: PIN. If PIN Property is not present exit safely"
+  (interactive "P")
+  (defvar property-name "PIN")
+  (let ((display-property-name (capitalize property-name))
+        (property (org-entry-get (point) property-name t))
+        output-message heading)
+    (if (and property)
+	(format "%06d" (totp property)))
+    ))
 
 (defun totp (totp-secret)
   "Return a 6 digit totp seeded by a base32 encoded TOTP-SECRET"
@@ -82,11 +89,9 @@
            (totp-pin (bindat-unpack '((:totp-pin u32)) (substring totp-hmac totp-offset (+ totp-offset 4))))
            (totp-pin (bindat-get-field totp-pin ':totp-pin))
            (totp-pin (logand totp-pin #x7fffffff))
-           (totp-pin (% totp-pin 1000000)))
-      (message (format "totp-pin: %06d (remaining: %d secs)"
-                       totp-pin
-                       (- totp-interval (% (truncate (time-to-seconds)) totp-interval))
-                       ))
+           (totp-pin (% totp-pin 1000000))
+	   (remaining-time (- totp-interval (% (truncate (time-to-seconds)) totp-interval))))
+      (copy-to-clipboard totp-pin remaining-time)
       totp-pin)
     ))
 
