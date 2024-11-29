@@ -67,7 +67,9 @@
 
 (defun totp (totp-secret)
   "Return a 6 digit totp seeded by a base32 encoded TOTP-SECRET"
-  (let* ((totp-secret (unibyte-base32-decode-string (upcase totp-secret)))
+    (let* ((fix-secret (replace-regexp-in-string " " "" (upcase totp-secret)))
+           (totp-secret
+            (unibyte-base32-decode-string (format "%s%s" fix-secret (make-string (% (string-width fix-secret) 4) ?=))))
          (totp-interval 30)
          ;; remind me to update this in 2038
          (totp-time (bindat-pack
